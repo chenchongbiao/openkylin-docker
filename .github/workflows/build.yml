@@ -1,0 +1,55 @@
+name: build rootfs
+
+on:
+  push:
+    branches: [ 'master' ]
+    paths:
+      - 'build.sh'
+      - 'Dockerfile'
+  workflow_dispatch:
+
+env:
+  owner: chenchongbiao
+
+jobs:
+  build:
+    name: Build tar file
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [ amd64, arm64 ]
+        codename: [ nile ]
+
+    steps:
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build openkylin images
+        run: |
+          sudo bash build.sh ${{ matrix.codename }} ${{ matrix.arch }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Docker image push
+        run: |
+          docker push ${{ env.owner }}/openkylin:${{ matrix.codename }}-${{ matrix.arch }}
+          if [ "${{ matrix.arch }}" == "amd64" ]; then
+            if [ "${{ matrix.codename }}" == "nile" ]; then
+              docker tag ${{ env.owner }}/openkylin:${{ matrix.codename }}-${{ matrix.arch }} "${{ env.owner }}/openkylin:latest"
+              docker tag ${{ env.owner }}/openkylin:${{ matrix.codename }}-${{ matrix.arch }} "${{ env.owner }}/openkylin:nile"
+              docker tag ${{ env.owner }}/openkylin:${{ matrix.codename }}-${{ matrix.arch }} "${{ env.owner }}/openkylin:2.0"
+              docker push "${{ env.owner }}/openkylin:latest"
+              docker push "${{ env.owner }}/openkylin:nile"
+              docker push "${{ env.owner }}/openkylin:2.0"
+            fi
+          fi
